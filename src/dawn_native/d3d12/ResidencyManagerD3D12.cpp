@@ -50,7 +50,7 @@ namespace dawn_native { namespace d3d12 {
         }
 
         pageable->IncrementResidencyLock();
-
+        
         return {};
     }
 
@@ -219,13 +219,18 @@ namespace dawn_native { namespace d3d12 {
 
             sizeEvicted += pageable->GetSize();
             resourcesToEvict.push_back(pageable->GetD3D12Pageable());
+            D3D12_RESIDENCY_PRIORITY lowPriority = D3D12_RESIDENCY_PRIORITY_LOW;
+            ID3D12Pageable* p = pageable->GetD3D12Pageable();
+
+            mDevice->GetD3D12Device1()->SetResidencyPriority(1, &p, &lowPriority);
+            
         }
 
-        if (resourcesToEvict.size() > 0) {
+        /*if (resourcesToEvict.size() > 0) {
             DAWN_TRY(CheckHRESULT(
                 mDevice->GetD3D12Device()->Evict(resourcesToEvict.size(), resourcesToEvict.data()),
                 "Evicting resident heaps to free memory"));
-        }
+        }*/
 
         return sizeEvicted;
     }
@@ -238,6 +243,8 @@ namespace dawn_native { namespace d3d12 {
             return {};
         }
 
+
+
         std::vector<ID3D12Pageable*> localHeapsToMakeResident;
         std::vector<ID3D12Pageable*> nonLocalHeapsToMakeResident;
         uint64_t localSizeToMakeResident = 0;
@@ -246,7 +253,11 @@ namespace dawn_native { namespace d3d12 {
         Serial pendingCommandSerial = mDevice->GetPendingCommandSerial();
         for (size_t i = 0; i < heapCount; i++) {
             Heap* heap = heaps[i];
+           /* D3D12_RESIDENCY_PRIORITY highPriority = D3D12_RESIDENCY_PRIORITY_HIGH;
+            ID3D12Pageable* p = heap->GetD3D12Pageable();
 
+            mDevice->GetD3D12Device1()->SetResidencyPriority(1, &p, &highPriority);
+            */
             // Heaps that are locked resident are not tracked in the LRU cache.
             if (heap->IsResidencyLocked()) {
                 continue;
@@ -275,12 +286,12 @@ namespace dawn_native { namespace d3d12 {
             // Insert the heap into the appropriate LRU.
             TrackResidentAllocation(heap);
         }
-
+        /*
         if (localSizeToMakeResident > 0) {
             return MakeAllocationsResident(&mVideoMemoryInfo.local, localSizeToMakeResident,
                                            localHeapsToMakeResident.size(),
                                            localHeapsToMakeResident.data());
-        }
+        }*/
 
         if (nonLocalSizeToMakeResident > 0) {
             ASSERT(!mDevice->GetDeviceInfo().isUMA);
@@ -325,8 +336,7 @@ namespace dawn_native { namespace d3d12 {
                     "MakeResident has failed due to excessive video memory usage.");
             }
 
-            hr =
-                mDevice->GetD3D12Device()->MakeResident(numberOfObjectsToMakeResident, allocations);
+            hr = mDevice->GetD3D12Device()->MakeResident(numberOfObjectsToMakeResident, allocations);
         }
 
         return {};
@@ -344,6 +354,7 @@ namespace dawn_native { namespace d3d12 {
 
         ASSERT(pageable->IsInList() == false);
         GetMemorySegmentInfo(pageable->GetMemorySegment())->lruCache.Append(pageable);
+
     }
 
     // Places an artifical cap on Dawn's budget so we can test in a predictable manner. If used,
